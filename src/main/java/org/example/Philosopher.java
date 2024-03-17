@@ -1,20 +1,23 @@
 package org.example;
 
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 
 public class Philosopher extends Thread {
 
     private final int id;
     private int idLeftFork;
     private int idRightFork;
-    private Semaphore permissionToTake;
+    private Semaphore waitForFork;
+    private Semaphore permissionDenied;
     private Semaphore[] forks;
 
-    public Philosopher(int id, Semaphore permissionToTake, Semaphore[] forks) {
+    public Philosopher(int id, Semaphore waitForFork, Semaphore permissionDenied, Semaphore[] forks) {
         this.id = id;
         idLeftFork = ((id % 5) + 1) - 1;
         idRightFork = id - 1;
-        this.permissionToTake = permissionToTake;
+        this.waitForFork = waitForFork;
+        this.permissionDenied = permissionDenied;
         this.forks = forks;
     }
 
@@ -25,13 +28,20 @@ public class Philosopher extends Thread {
             System.out.println("Phylosopher " + id + " thinking " + i + " times");
 
             try {
-
-                permissionToTake.acquire();
-
-                forks[idLeftFork].acquire();
-                System.out.println("Phylosopher " + id + " took left fork with id: " + idLeftFork);
-                forks[idRightFork].acquire();
-                System.out.println("Phylosopher " + id + " took right fork with id: " + idRightFork);
+                while (true) {
+                    permissionDenied.acquire();
+                    if (forks[idLeftFork].availablePermits() == 1 && forks[idRightFork].availablePermits() == 1) {
+                        forks[idLeftFork].acquire();
+                        System.out.println("Phylosopher " + id + " took left fork with id: " + idLeftFork);
+                        forks[idRightFork].acquire();
+                        System.out.println("Phylosopher " + id + " took right fork with id: " + idRightFork);
+                        break;
+                    } else {
+                        permissionDenied.release();
+                        waitForFork.acquire();
+                    }
+                }
+                permissionDenied.release();
 
                 System.out.println("Phylosopher " + id + " eating " + i + " times");
 
@@ -40,7 +50,7 @@ public class Philosopher extends Thread {
                 forks[idLeftFork].release();
                 System.out.println("Phylosopher " + id + " put left fork");
 
-                permissionToTake.release();
+                waitForFork.release();
             } catch (InterruptedException e) {
                 throw new RuntimeException(e);
             }
